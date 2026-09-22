@@ -56,17 +56,35 @@ Both appear as clickable cards on the sign-in screen.
 2. In Vercel, **Add New > Project**, and import the repository.
 3. Framework preset: **Other**. No build command. Output directory: `public`.
    Vercel detects this automatically from the repository layout.
-4. Under **Settings > Environment Variables**, add:
+4. Under **Settings > Environment Variables**, add three values. Tick Production,
+   Preview and Development for each.
 
-   | Name             | Value                   | Environments                     |
-   | ---------------- | ----------------------- | -------------------------------- |
-   | `OPENAI_API_KEY` | your key                | Production, Preview, Development |
-   | `OPENAI_MODEL`   | `gpt-4o-mini` (optional)| Production, Preview, Development |
+   For **Google Gemini**, which has a free tier:
+
+   | Name          | Value                                                  |
+   | ------------- | ------------------------------------------------------ |
+   | `AI_API_KEY`  | your Gemini key from aistudio.google.com               |
+   | `AI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` |
+   | `AI_MODEL`    | a model id from AI Studio, e.g. `gemini-3.8-flash`     |
+
+   For **OpenAI**:
+
+   | Name          | Value                          |
+   | ------------- | ------------------------------ |
+   | `AI_API_KEY`  | your key from platform.openai.com |
+   | `AI_BASE_URL` | `https://api.openai.com/v1`    |
+   | `AI_MODEL`    | `gpt-4o-mini`                  |
 
 5. Deploy. If you add the key after the first deploy, redeploy so the function picks it up.
 
 The key is only ever read inside `api/ask.js`, which runs on Vercel's servers. It is never
 sent to the browser and is not in this repository.
+
+### Switching provider
+
+`api/ask.js` speaks the OpenAI chat-completions format, which OpenAI, Gemini and several
+other providers all serve. Changing provider means changing those three variables and
+redeploying. No code changes.
 
 ## Tests
 
@@ -78,13 +96,16 @@ npm i                        # installs playwright
 npx playwright install chromium
 
 npm run mock-provider        # terminal 1: stands in for the model, spends no key
-OPENAI_API_KEY=test-key OPENAI_BASE_URL=http://localhost:3112 npm run serve   # terminal 2
+AI_API_KEY=test-key AI_BASE_URL=http://localhost:3112 npm run serve   # terminal 2
 npm test                     # terminal 3
 ```
 
 `test/fakeopenai.mjs` speaks the streaming chat-completions format, so the whole request
 path including `api/ask.js` is exercised without a real key. `test/devserver.mjs` mimics
 what Vercel does: static files from `public/`, `/api/ask` routed to the function.
+
+Set `FAIL_MODE` on the mock provider to exercise the failure paths: `quota`, `ratelimit`
+or `model`. Each should produce a different, actionable message in the assistant panel.
 
 ## Layout
 

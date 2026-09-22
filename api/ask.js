@@ -3,11 +3,18 @@
  * The API key lives here, in a Vercel environment variable, and never reaches the
  * browser. The page posts {rules, messages} and gets back a stream of text.
  *
- * Environment variables (set these in Vercel, not in the repo):
- *   OPENAI_API_KEY    required
- *   OPENAI_MODEL      optional, defaults to gpt-4o-mini
- *   OPENAI_BASE_URL   optional, defaults to https://api.openai.com/v1
- *                     Point it at any OpenAI-compatible endpoint to switch provider.
+ * Provider-neutral: it speaks the OpenAI chat-completions format, which OpenAI, Google
+ * Gemini and several others all serve. Switching provider is three variables, no code.
+ *
+ * Environment variables (set these in the hosting settings, never in the repo):
+ *   AI_API_KEY    required. The provider's API key.
+ *   AI_BASE_URL   optional. Defaults to https://api.openai.com/v1
+ *                 Gemini: https://generativelanguage.googleapis.com/v1beta/openai
+ *   AI_MODEL      optional. Defaults to gpt-4o-mini
+ *                 Gemini: a model id from aistudio.google.com, e.g. gemini-3.8-flash
+ *
+ * OPENAI_API_KEY, OPENAI_BASE_URL and OPENAI_MODEL still work as fallbacks, so an
+ * existing deployment keeps running after this change.
  */
 
 const MAX_TOTAL_CHARS = 60000;   // roughly the model's input budget for this use
@@ -22,10 +29,10 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") { res.status(204).end(); return; }
   if (req.method !== "POST") return fail(res, 405, "method_not_allowed", "Use POST.");
 
-  const key = process.env.OPENAI_API_KEY;
+  const key = process.env.AI_API_KEY || process.env.OPENAI_API_KEY;
   if (!key) {
     return fail(res, 500, "no_key",
-      "OPENAI_API_KEY is not set. Add it in Vercel under Settings, Environment Variables, then redeploy.");
+      "AI_API_KEY is not set. Add it in Vercel under Settings, Environment Variables, then redeploy.");
   }
 
   let body = req.body;
@@ -58,7 +65,9 @@ export default async function handler(req, res) {
     return fail(res, 413, "too_large", "That is too much text to send at once. Select a smaller piece.");
   }
 
-  const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const base = (process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL ||
+                "https://api.openai.com/v1").replace(/\/+$/, "");
+  const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   let upstream;
   try {
@@ -66,7 +75,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: { "content-type": "application/json", authorization: "Bearer " + key },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        model: model,
         messages: messages,
         stream: true,
         temperature: 0.3,
@@ -98,16 +107,16 @@ export default async function handler(req, res) {
     let code, message;
     if (providerCode === "insufficient_quota") {
       code = "no_quota";
-      message = "The API account has no credit. A ChatGPT subscription does not include " +
-                "API usage, which is billed separately: add credit under Billing at " +
-                "platform.openai.com, then ask again.";
+      message = "The API account has no credit. Note that a ChatGPT or Gemini consumer " +
+                "subscription does not include API usage, which is billed separately. " +
+                "Add credit on the provider's billing page, then ask again.";
     } else if (upstream.status === 401 || providerCode === "invalid_api_key") {
       code = "bad_key";
-      message = "The API key was rejected. Check OPENAI_API_KEY in the hosting settings. " +
+      message = "The API key was rejected. Check AI_API_KEY in the hosting settings. " +
                 "Provider said: " + detail;
     } else if (providerCode === "model_not_found" || upstream.status === 404) {
       code = "bad_model";
-      message = "That model is not available to this API account. Set OPENAI_MODEL to one " +
+      message = "That model is not available to this API key. Set AI_MODEL to one " +
                 "you have access to. Provider said: " + detail;
     } else if (upstream.status === 429) {
       code = "rate_limited";
