@@ -1969,8 +1969,12 @@
         slot.content = tutorErrCopy(code, e && e.message);
         slot.error = true;
       }
-      // Permanent for this view: stop offering a feature that cannot work.
-      if (["not_granted", "sampling_disabled", "not_declared", "no_backend", "no_key", "bad_key"].indexOf(code) > -1) {
+      // Hide the feature only when the viewer themselves has refused it or the platform
+      // cannot serve it. A misconfigured deployment must stay visible: hiding the panel
+      // also hides the message that says how to fix it, which is the worst moment to
+      // disappear. Those errors are shown and the panel stays open.
+      if (["not_granted", "sampling_disabled", "not_declared", "capability_disabled",
+           "capability_removed", "session_expired"].indexOf(code) > -1) {
         tutor.denied = true;
       }
       tutorSetBusy(false);
