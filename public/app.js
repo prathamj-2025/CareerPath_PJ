@@ -1726,10 +1726,21 @@
     no_backend: "The assistant needs its server function. On a deployment, check that api/ask is present.",
     no_key: "The server has no API key configured. Add OPENAI_API_KEY in the hosting settings and redeploy.",
     bad_key: "The API key was rejected. Check OPENAI_API_KEY in the hosting settings.",
+    no_quota: "The API account is out of credit. Add credit to the provider account and try again.",
+    bad_model: "The configured model is not available to this API account.",
     too_large: "That is too much text to send at once. Select a smaller piece.",
     upstream_unreachable: "Could not reach the model provider. Check the connection and try again.",
     bad_request: "The assistant sent a malformed request. Reload the page."
   };
+
+  /* For a misconfiguration the server's own message names the exact fix, which is more
+     use than generic copy while a deployment is being set up. */
+  var TUTOR_SHOW_DETAIL = ["no_key", "bad_key", "no_quota", "bad_model", "rate_limited", "upstream_error"];
+
+  function tutorErrCopy(code, message) {
+    if (TUTOR_SHOW_DETAIL.indexOf(code) > -1 && message) return message;
+    return TUTOR_ERR[code] || TUTOR_ERR.upstream_error;
+  }
 
   /* ---- backend: the artifact runtime ---- */
 
@@ -1953,9 +1964,9 @@
         if (!slot.content) tutor.turns.splice(tutor.turns.indexOf(slot), 1);
       } else if (e && e.text) {
         slot.content = e.text;
-        tutor.turns.push({ role: "assistant", content: TUTOR_ERR[code] || TUTOR_ERR.upstream_error, error: true });
+        tutor.turns.push({ role: "assistant", content: tutorErrCopy(code, e && e.message), error: true });
       } else {
-        slot.content = TUTOR_ERR[code] || TUTOR_ERR.upstream_error;
+        slot.content = tutorErrCopy(code, e && e.message);
         slot.error = true;
       }
       // Permanent for this view: stop offering a feature that cannot work.

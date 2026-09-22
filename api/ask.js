@@ -78,16 +78,44 @@ export default async function handler(req, res) {
   }
 
   if (!upstream.ok || !upstream.body) {
+    // Read the provider's own error so the page can say what is actually wrong.
+    // A 429 on a first request is usually spent quota, not rate limiting, and those
+    // need completely different fixes.
     let detail = "";
-    try { detail = (await upstream.text()).slice(0, 400); } catch (e) { /* ignore */ }
-    const code = upstream.status === 401 ? "bad_key"
-               : upstream.status === 429 ? "rate_limited"
-               : "upstream_error";
-    const message = code === "bad_key"
-      ? "The API key was rejected. Check OPENAI_API_KEY in Vercel."
-      : code === "rate_limited"
-        ? "The model provider is rate limiting or the account is out of quota."
-        : "The model provider returned an error. " + detail;
+    let providerCode = "";
+    try {
+      const raw = await upstream.text();
+      detail = raw.slice(0, 400);
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.error) {
+          providerCode = parsed.error.code || parsed.error.type || "";
+          if (parsed.error.message) detail = String(parsed.error.message).slice(0, 400);
+        }
+      } catch (e) { /* not JSON: keep the raw text */ }
+    } catch (e) { /* no body at all */ }
+
+    let code, message;
+    if (providerCode === "insufficient_quota") {
+      code = "no_quota";
+      message = "The API account has no credit. A ChatGPT subscription does not include " +
+                "API usage, which is billed separately: add credit under Billing at " +
+                "platform.openai.com, then ask again.";
+    } else if (upstream.status === 401 || providerCode === "invalid_api_key") {
+      code = "bad_key";
+      message = "The API key was rejected. Check OPENAI_API_KEY in the hosting settings. " +
+                "Provider said: " + detail;
+    } else if (providerCode === "model_not_found" || upstream.status === 404) {
+      code = "bad_model";
+      message = "That model is not available to this API account. Set OPENAI_MODEL to one " +
+                "you have access to. Provider said: " + detail;
+    } else if (upstream.status === 429) {
+      code = "rate_limited";
+      message = "The provider is rate limiting these requests. Provider said: " + detail;
+    } else {
+      code = "upstream_error";
+      message = "The provider returned an error. Provider said: " + detail;
+    }
     return fail(res, upstream.status, code, message);
   }
 

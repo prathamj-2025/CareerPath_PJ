@@ -13,7 +13,33 @@ http.createServer(async (req, res) => {
   if (auth !== 'Bearer test-key') {
     res.statusCode = 401;
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ error: { message: 'Incorrect API key provided' } }));
+    res.end(JSON.stringify({ error: { message: 'Incorrect API key provided', code: 'invalid_api_key' } }));
+    return;
+  }
+
+  // FAIL_MODE lets the tests drive the provider's error paths.
+  const mode = process.env.FAIL_MODE || '';
+  if (mode === 'quota') {
+    res.statusCode = 429;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: {
+      message: 'You exceeded your current quota, please check your plan and billing details.',
+      type: 'insufficient_quota', code: 'insufficient_quota' } }));
+    return;
+  }
+  if (mode === 'ratelimit') {
+    res.statusCode = 429;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: {
+      message: 'Rate limit reached for requests', type: 'requests', code: 'rate_limit_exceeded' } }));
+    return;
+  }
+  if (mode === 'model') {
+    res.statusCode = 404;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ error: {
+      message: 'The model `gpt-9` does not exist or you do not have access to it.',
+      code: 'model_not_found' } }));
     return;
   }
 
